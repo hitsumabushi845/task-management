@@ -491,7 +491,7 @@ func (m *Model) View() string {
 func (m *Model) viewList() string {
 	s := "Task Management"
 	if !m.filter.IsEmpty() {
-		s += " (フィルタ適用中)"
+		s += " (Filter Active)"
 	}
 	s += "\n\n"
 
@@ -509,7 +509,7 @@ func (m *Model) viewList() string {
 		if len(m.tasks) == 0 {
 			s += "No tasks yet. Press 'n' to create one.\n\n"
 		} else {
-			s += "フィルタに一致するタスクがありません。\n\n"
+			s += "No tasks match the filter.\n\n"
 		}
 	} else {
 		for i, task := range sortedTasks {
@@ -534,13 +534,13 @@ func (m *Model) viewList() string {
 			switch task.Priority {
 			case domain.PriorityHigh:
 				priorityStyle = styles.PriorityHigh
-				priorityText = "高"
+				priorityText = "H"
 			case domain.PriorityMedium:
 				priorityStyle = styles.PriorityMedium
-				priorityText = "中"
+				priorityText = "M"
 			case domain.PriorityLow:
 				priorityStyle = styles.PriorityLow
-				priorityText = "低"
+				priorityText = "L"
 			}
 
 			// Build task line
@@ -563,30 +563,30 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]新規 [d]削除 [Space]ステータス [f]フィルタ [s]ソート [↑/k]上 [↓/j]下 [q]終了"
+	helpText := "[n]New [d]Delete [Space]Status [f]Filter [s]Sort [↑/k]Up [↓/j]Down [q]Quit"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
 }
 
 func (m *Model) viewCreate() string {
-	s := "新規タスク作成\n\n"
+	s := "Create New Task\n\n"
 
-	s += "タイトル: " + m.inputTitle + "█\n\n"
+	s += "Title: " + m.inputTitle + "█\n\n"
 
 	// Priority selection
-	s += "優先度 (Tabで切替): "
+	s += "Priority (Tab to cycle): "
 	switch m.inputPriority {
 	case domain.PriorityHigh:
-		s += styles.PriorityHigh.Render("[高]") + " 中 低"
+		s += styles.PriorityHigh.Render("[H]") + " M L"
 	case domain.PriorityMedium:
-		s += "高 " + styles.PriorityMedium.Render("[中]") + " 低"
+		s += "H " + styles.PriorityMedium.Render("[M]") + " L"
 	case domain.PriorityLow:
-		s += "高 中 " + styles.PriorityLow.Render("[低]")
+		s += "H M " + styles.PriorityLow.Render("[L]")
 	}
 	s += "\n\n"
 
-	helpText := "[Enter]作成 [Esc]キャンセル [Tab]優先度"
+	helpText := "[Enter]Create [Esc]Cancel [Tab]Priority"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -600,7 +600,7 @@ func (m *Model) viewKanban() string {
 	// Filter indicator
 	var s string
 	if !m.filter.IsEmpty() {
-		s = "(フィルタ適用中)\n"
+		s = "(Filter Active)\n"
 	}
 
 	// Show sort menu if open
@@ -661,7 +661,7 @@ func (m *Model) viewKanban() string {
 	)
 
 	// Status bar
-	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [f]フィルタ [s]ソート [v]リスト [?]ヘルプ [q]終了"
+	helpText := "[h/l]Column [j/k]Up/Down [Enter]Advance [f]Filter [s]Sort [v]List [?]Help [q]Quit"
 	s += "\n" + styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -681,13 +681,13 @@ func (m *Model) renderKanbanCell(tasks []*domain.Task, row, col, width int) stri
 	switch task.Priority {
 	case domain.PriorityHigh:
 		priorityStyle = styles.PriorityHigh
-		priorityText = "高"
+		priorityText = "H"
 	case domain.PriorityMedium:
 		priorityStyle = styles.PriorityMedium
-		priorityText = "中"
+		priorityText = "M"
 	case domain.PriorityLow:
 		priorityStyle = styles.PriorityLow
-		priorityText = "低"
+		priorityText = "L"
 	}
 
 	// Truncate title if needed (use rune count for proper Unicode handling)
@@ -718,49 +718,48 @@ func (m *Model) viewHelp() string {
 	var s string
 
 	if m.previousMode == viewModeKanban {
-		s = `┌─ ヘルプ - カンバンビュー ───────────────┐
+		s = `┌─ Help - Kanban View ───────────────────┐
 │                                        │
-│ 移動:                                  │
-│   h/←      : 左の列へ                  │
-│   l/→      : 右の列へ                  │
-│   j/↓      : 列内で下へ                │
-│   k/↑      : 列内で上へ                │
+│ Navigation:                            │
+│   h/←      : Move to left column       │
+│   l/→      : Move to right column      │
+│   j/↓      : Move down in column       │
+│   k/↑      : Move up in column         │
 │                                        │
-│ タスク操作:                            │
-│   Enter    : 次のステータスへ移動      │
-│   e        : タスク編集                │
-│   n        : 新規タスク作成            │
-│   d        : タスク削除                │
+│ Task Actions:                          │
+│   Enter    : Advance to next status    │
+│   n        : Create new task           │
+│   d        : Delete task               │
 │                                        │
-│ 表示:                                  │
-│   v        : リストビューへ切替        │
-│   f        : フィルタ設定              │
-│   s        : ソート設定                │
-│   ?/F1     : このヘルプ                │
-│   q        : 終了                      │
+│ View:                                  │
+│   v        : Switch to list view       │
+│   f        : Filter settings           │
+│   s        : Sort settings             │
+│   ?/F1     : This help                 │
+│   q        : Quit                      │
 │                                        │
-│         [Esc または ? で閉じる]        │
+│         [Press Esc or ? to close]      │
 └────────────────────────────────────────┘`
 	} else {
-		s = `┌─ ヘルプ - リストビュー ─────────────────┐
+		s = `┌─ Help - List View ─────────────────────┐
 │                                        │
-│ 移動:                                  │
-│   j/↓      : 下へ移動                  │
-│   k/↑      : 上へ移動                  │
+│ Navigation:                            │
+│   j/↓      : Move down                 │
+│   k/↑      : Move up                   │
 │                                        │
-│ タスク操作:                            │
-│   Space    : ステータス切替            │
-│   n        : 新規タスク作成            │
-│   d        : タスク削除                │
+│ Task Actions:                          │
+│   Space    : Toggle status             │
+│   n        : Create new task           │
+│   d        : Delete task               │
 │                                        │
-│ 表示:                                  │
-│   v        : カンバンビューへ切替      │
-│   f        : フィルタ設定              │
-│   s        : ソート設定                │
-│   ?/F1     : このヘルプ                │
-│   q        : 終了                      │
+│ View:                                  │
+│   v        : Switch to kanban view     │
+│   f        : Filter settings           │
+│   s        : Sort settings             │
+│   ?/F1     : This help                 │
+│   q        : Quit                      │
 │                                        │
-│         [Esc または ? で閉じる]        │
+│         [Press Esc or ? to close]      │
 └────────────────────────────────────────┘`
 	}
 
@@ -768,11 +767,11 @@ func (m *Model) viewHelp() string {
 }
 
 func (m *Model) viewFilter() string {
-	s := "┌─ フィルタ設定 ─────────────────────────┐\n"
+	s := "┌─ Filter Settings ─────────────────────┐\n"
 	s += "│                                        │\n"
 
 	// Status checkboxes (cursor 0-2)
-	s += "│ ステータス:                            │\n"
+	s += "│ Status:                                │\n"
 	statusLabels := []string{"New", "Working", "Completed"}
 	statusValues := []domain.TaskStatus{domain.TaskStatusNew, domain.TaskStatusWorking, domain.TaskStatusCompleted}
 	for i, label := range statusLabels {
@@ -796,8 +795,8 @@ func (m *Model) viewFilter() string {
 	s += "│                                        │\n"
 
 	// Priority checkboxes (cursor 3-5)
-	s += "│ 優先度:                                │\n"
-	priorityLabels := []string{"高", "中", "低"}
+	s += "│ Priority:                              │\n"
+	priorityLabels := []string{"High", "Medium", "Low"}
 	priorityValues := []domain.Priority{domain.PriorityHigh, domain.PriorityMedium, domain.PriorityLow}
 	for i, label := range priorityLabels {
 		checked := m.hasFilterPriority(priorityValues[i])
@@ -820,8 +819,8 @@ func (m *Model) viewFilter() string {
 	s += "│                                        │\n"
 
 	// Date range radio buttons (cursor 6-10)
-	s += "│ 期限:                                  │\n"
-	dateLabels := []string{"すべて", "今日", "今週", "期限切れ", "期限なし"}
+	s += "│ Due Date:                              │\n"
+	dateLabels := []string{"All", "Today", "This Week", "Overdue", "No Due Date"}
 	dateValues := []domain.DateRange{domain.DateRangeAll, domain.DateRangeToday, domain.DateRangeThisWeek, domain.DateRangeOverdue, domain.DateRangeNoDueDate}
 	for i, label := range dateLabels {
 		selected := m.filter.DateRange == dateValues[i]
@@ -850,8 +849,8 @@ func (m *Model) viewFilter() string {
 	if m.filterCursor == 11 {
 		searchCursor = "> "
 	}
-	searchLine := fmt.Sprintf("%s検索: %s█", searchCursor, m.filter.SearchText)
-	searchRuneCount := len(searchCursor) + len("検索: ") + len([]rune(m.filter.SearchText)) + 1
+	searchLine := fmt.Sprintf("%sSearch: %s█", searchCursor, m.filter.SearchText)
+	searchRuneCount := len(searchCursor) + len("Search: ") + len([]rune(m.filter.SearchText)) + 1
 	searchPadding := 38 - searchRuneCount
 	if searchPadding < 0 {
 		searchPadding = 0
@@ -865,8 +864,8 @@ func (m *Model) viewFilter() string {
 	if m.filterCursor == 12 {
 		clearCursor = "> "
 	}
-	clearLine := fmt.Sprintf("%s[クリア]", clearCursor)
-	clearRuneCount := len(clearCursor) + len("[クリア]")
+	clearLine := fmt.Sprintf("%s[Clear]", clearCursor)
+	clearRuneCount := len(clearCursor) + len("[Clear]")
 	clearPadding := 38 - clearRuneCount
 	if clearPadding < 0 {
 		clearPadding = 0
@@ -874,8 +873,8 @@ func (m *Model) viewFilter() string {
 	s += fmt.Sprintf("│ %s%s │\n", clearLine, strings.Repeat(" ", clearPadding))
 
 	s += "│                                        │\n"
-	s += "│   [j/k]移動 [Space]選択 [Enter]適用   │\n"
-	s += "│   [Esc]キャンセル                      │\n"
+	s += "│   [j/k]Move [Space]Select [Enter]Apply │\n"
+	s += "│   [Esc]Cancel                          │\n"
 	s += "└────────────────────────────────────────┘"
 
 	return s
@@ -996,17 +995,17 @@ func (m *Model) toggleFilterPriority(priority domain.Priority) {
 
 // viewSortMenu renders the sort menu overlay
 func (m *Model) viewSortMenu() string {
-	s := "┌─ ソート ────────────┐\n"
+	s := "┌─ Sort ──────────────┐\n"
 
 	options := []struct {
 		by    domain.SortBy
 		label string
 	}{
-		{domain.SortByCreatedAt, "作成日"},
-		{domain.SortByDueDate, "期限"},
-		{domain.SortByPriority, "優先度"},
-		{domain.SortByStatus, "ステータス"},
-		{domain.SortByTitle, "タイトル"},
+		{domain.SortByCreatedAt, "Created"},
+		{domain.SortByDueDate, "Due Date"},
+		{domain.SortByPriority, "Priority"},
+		{domain.SortByStatus, "Status"},
+		{domain.SortByTitle, "Title"},
 	}
 
 	for i, opt := range options {
