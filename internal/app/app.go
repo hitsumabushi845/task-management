@@ -41,6 +41,9 @@ type Model struct {
 	// Filter state
 	filter       domain.Filter
 	filterCursor int
+	// Sort state
+	taskSort     domain.Sort
+	sortMenuOpen bool
 }
 
 // New creates a new application model
@@ -126,8 +129,10 @@ func (m *Model) toggleTaskStatus(task *domain.Task) tea.Cmd {
 func (m *Model) tasksByStatus(status domain.TaskStatus) []*domain.Task {
 	// Apply filter first
 	filtered := m.filter.Apply(m.tasks)
+	// Apply sort
+	sorted := m.taskSort.Apply(filtered)
 	var result []*domain.Task
-	for _, task := range filtered {
+	for _, task := range sorted {
 		if task.Status == status {
 			result = append(result, task)
 		}
@@ -211,6 +216,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.previousMode = m.mode
 			m.mode = viewModeFilter
 			m.filterCursor = 0
+
+		case "s":
+			// Toggle sort menu
+			m.sortMenuOpen = !m.sortMenuOpen
+
+		case "1", "2", "3", "4", "5":
+			if m.sortMenuOpen {
+				idx := int(msg.String()[0] - '1')
+				sortOptions := []domain.SortBy{
+					domain.SortByCreatedAt,
+					domain.SortByDueDate,
+					domain.SortByPriority,
+					domain.SortByStatus,
+					domain.SortByTitle,
+				}
+				if idx >= 0 && idx < len(sortOptions) {
+					if m.taskSort.By == sortOptions[idx] {
+						m.taskSort.Ascending = !m.taskSort.Ascending
+					} else {
+						m.taskSort.By = sortOptions[idx]
+						m.taskSort.Ascending = false
+					}
+				}
+				m.sortMenuOpen = false
+			}
 
 		case "?", "f1":
 			// Show help modal
@@ -370,6 +400,31 @@ func (m *Model) updateKanbanMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewModeFilter
 		m.filterCursor = 0
 
+	case "s":
+		// Toggle sort menu
+		m.sortMenuOpen = !m.sortMenuOpen
+
+	case "1", "2", "3", "4", "5":
+		if m.sortMenuOpen {
+			idx := int(msg.String()[0] - '1')
+			sortOptions := []domain.SortBy{
+				domain.SortByCreatedAt,
+				domain.SortByDueDate,
+				domain.SortByPriority,
+				domain.SortByStatus,
+				domain.SortByTitle,
+			}
+			if idx >= 0 && idx < len(sortOptions) {
+				if m.taskSort.By == sortOptions[idx] {
+					m.taskSort.Ascending = !m.taskSort.Ascending
+				} else {
+					m.taskSort.By = sortOptions[idx]
+					m.taskSort.Ascending = false
+				}
+			}
+			m.sortMenuOpen = false
+		}
+
 	case "?", "f1":
 		m.previousMode = m.mode
 		m.mode = viewModeHelp
@@ -440,17 +495,24 @@ func (m *Model) viewList() string {
 	}
 	s += "\n\n"
 
+	// Show sort menu if open
+	if m.sortMenuOpen {
+		s += m.viewSortMenu() + "\n"
+	}
+
 	// Apply filter to tasks
 	filteredTasks := m.filter.Apply(m.tasks)
+	// Apply sort after filter
+	sortedTasks := m.taskSort.Apply(filteredTasks)
 
-	if len(filteredTasks) == 0 {
+	if len(sortedTasks) == 0 {
 		if len(m.tasks) == 0 {
 			s += "No tasks yet. Press 'n' to create one.\n\n"
 		} else {
 			s += "フィルタに一致するタスクがありません。\n\n"
 		}
 	} else {
-		for i, task := range filteredTasks {
+		for i, task := range sortedTasks {
 			// Status icon
 			var statusIcon string
 			var statusStyle lipgloss.Style
@@ -501,7 +563,7 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]新規 [d]削除 [Space]ステータス [f]フィルタ [↑/k]上 [↓/j]下 [q]終了"
+	helpText := "[n]新規 [d]削除 [Space]ステータス [f]フィルタ [s]ソート [↑/k]上 [↓/j]下 [q]終了"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -539,6 +601,11 @@ func (m *Model) viewKanban() string {
 	var s string
 	if !m.filter.IsEmpty() {
 		s = "(フィルタ適用中)\n"
+	}
+
+	// Show sort menu if open
+	if m.sortMenuOpen {
+		s += m.viewSortMenu() + "\n"
 	}
 
 	// Column width
@@ -594,7 +661,7 @@ func (m *Model) viewKanban() string {
 	)
 
 	// Status bar
-	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [f]フィルタ [v]リスト [?]ヘルプ [q]終了"
+	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [f]フィルタ [s]ソート [v]リスト [?]ヘルプ [q]終了"
 	s += "\n" + styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -925,4 +992,37 @@ func (m *Model) toggleFilterPriority(priority domain.Priority) {
 	}
 	// Add priority
 	m.filter.Priorities = append(m.filter.Priorities, priority)
+}
+
+// viewSortMenu renders the sort menu overlay
+func (m *Model) viewSortMenu() string {
+	s := "┌─ ソート ────────────┐\n"
+
+	options := []struct {
+		by    domain.SortBy
+		label string
+	}{
+		{domain.SortByCreatedAt, "作成日"},
+		{domain.SortByDueDate, "期限"},
+		{domain.SortByPriority, "優先度"},
+		{domain.SortByStatus, "ステータス"},
+		{domain.SortByTitle, "タイトル"},
+	}
+
+	for i, opt := range options {
+		selected := " "
+		order := ""
+		if m.taskSort.By == opt.by {
+			selected = "●"
+			if m.taskSort.Ascending {
+				order = " ↑"
+			} else {
+				order = " ↓"
+			}
+		}
+		s += fmt.Sprintf("│ %d (%s) %-10s%s│\n", i+1, selected, opt.label, order)
+	}
+
+	s += "└─────────────────────┘\n"
+	return s
 }
