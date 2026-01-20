@@ -72,6 +72,17 @@ func (m *Model) createTask(title string, priority domain.Priority) tea.Cmd {
 	}
 }
 
+// deleteTask deletes the selected task
+func (m *Model) deleteTask(id int64) tea.Cmd {
+	return func() tea.Msg {
+		err := m.repo.Delete(context.Background(), id)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		return taskDeletedMsg{id: id}
+	}
+}
+
 // Update handles messages and updates the model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -101,6 +112,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = viewModeCreate
 			m.inputTitle = ""
 			m.inputPriority = domain.PriorityMedium
+
+		case "d":
+			// Delete selected task
+			if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
+				task := m.tasks[m.cursor]
+				return m, m.deleteTask(task.ID)
+			}
 		}
 
 	case taskListLoadedMsg:
@@ -114,6 +132,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case taskCreatedMsg:
 		// Task created, reload list
+		return m, m.loadTasks()
+
+	case taskDeletedMsg:
+		// Task deleted, reload list
 		return m, m.loadTasks()
 
 	case errMsg:
@@ -243,7 +265,7 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]新規 [↑/k]上 [↓/j]下 [q]終了"
+	helpText := "[n]新規 [d]削除 [↑/k]上 [↓/j]下 [q]終了"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
