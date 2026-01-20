@@ -148,6 +148,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Handle kanban mode
+		if m.mode == viewModeKanban {
+			return m.updateKanbanMode(msg)
+		}
+
 		// List mode key handlers
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -271,6 +276,110 @@ func (m *Model) updateCreateMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// updateKanbanMode handles input in kanban mode
+func (m *Model) updateKanbanMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	columns := [3][]*domain.Task{
+		m.tasksByStatus(domain.TaskStatusNew),
+		m.tasksByStatus(domain.TaskStatusWorking),
+		m.tasksByStatus(domain.TaskStatusCompleted),
+	}
+
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+
+	case "h", "left":
+		if m.kanbanColumn > 0 {
+			m.kanbanColumn--
+			// Adjust cursor if needed
+			if m.kanbanCursors[m.kanbanColumn] >= len(columns[m.kanbanColumn]) {
+				m.kanbanCursors[m.kanbanColumn] = len(columns[m.kanbanColumn]) - 1
+			}
+			if m.kanbanCursors[m.kanbanColumn] < 0 {
+				m.kanbanCursors[m.kanbanColumn] = 0
+			}
+		}
+
+	case "l", "right":
+		if m.kanbanColumn < 2 {
+			m.kanbanColumn++
+			// Adjust cursor if needed
+			if m.kanbanCursors[m.kanbanColumn] >= len(columns[m.kanbanColumn]) {
+				m.kanbanCursors[m.kanbanColumn] = len(columns[m.kanbanColumn]) - 1
+			}
+			if m.kanbanCursors[m.kanbanColumn] < 0 {
+				m.kanbanCursors[m.kanbanColumn] = 0
+			}
+		}
+
+	case "j", "down":
+		col := m.kanbanColumn
+		if m.kanbanCursors[col] < len(columns[col])-1 {
+			m.kanbanCursors[col]++
+		}
+
+	case "k", "up":
+		col := m.kanbanColumn
+		if m.kanbanCursors[col] > 0 {
+			m.kanbanCursors[col]--
+		}
+
+	case "enter":
+		// Move task to next status
+		col := m.kanbanColumn
+		if len(columns[col]) > 0 && m.kanbanCursors[col] < len(columns[col]) {
+			task := columns[col][m.kanbanCursors[col]]
+			return m, m.advanceTaskStatus(task)
+		}
+
+	case "n":
+		m.mode = viewModeCreate
+		m.inputTitle = ""
+		m.inputPriority = domain.PriorityMedium
+
+	case "d":
+		col := m.kanbanColumn
+		if len(columns[col]) > 0 && m.kanbanCursors[col] < len(columns[col]) {
+			task := columns[col][m.kanbanCursors[col]]
+			return m, m.deleteTask(task.ID)
+		}
+
+	case "v":
+		m.mode = viewModeList
+
+	case "?", "f1":
+		m.previousMode = m.mode
+		m.mode = viewModeHelp
+	}
+
+	return m, nil
+}
+
+// advanceTaskStatus moves task to next status (new -> working -> completed)
+func (m *Model) advanceTaskStatus(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		now := time.Now()
+		switch task.Status {
+		case domain.TaskStatusNew:
+			task.Status = domain.TaskStatusWorking
+			task.StartedAt = &now
+		case domain.TaskStatusWorking:
+			task.Status = domain.TaskStatusCompleted
+			task.CompletedAt = &now
+		case domain.TaskStatusCompleted:
+			// Already completed, no change
+			return nil
+		}
+
+		err := m.repo.Update(context.Background(), task)
+		if err != nil {
+			return errMsg{err: err}
+		}
+
+		return taskUpdatedMsg{task: task}
+	}
 }
 
 // View renders the application
