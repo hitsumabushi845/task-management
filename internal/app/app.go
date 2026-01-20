@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,6 +35,9 @@ type Model struct {
 	previousMode  viewMode
 	inputTitle    string
 	inputPriority domain.Priority
+	// Kanban view state
+	kanbanColumn  int    // 0=New, 1=Working, 2=Completed
+	kanbanCursors [3]int // Cursor position within each column
 }
 
 // New creates a new application model
@@ -113,6 +118,16 @@ func (m *Model) toggleTaskStatus(task *domain.Task) tea.Cmd {
 
 		return taskUpdatedMsg{task: task}
 	}
+}
+
+func (m *Model) tasksByStatus(status domain.TaskStatus) []*domain.Task {
+	var result []*domain.Task
+	for _, task := range m.tasks {
+		if task.Status == status {
+			result = append(result, task)
+		}
+	}
+	return result
 }
 
 // Update handles messages and updates the model
@@ -370,7 +385,114 @@ func (m *Model) viewCreate() string {
 }
 
 func (m *Model) viewKanban() string {
-	return "Kanban view (coming soon)\n\nPress 'v' to switch to list view, '?' for help, 'q' to quit.\n"
+	newTasks := m.tasksByStatus(domain.TaskStatusNew)
+	workingTasks := m.tasksByStatus(domain.TaskStatusWorking)
+	completedTasks := m.tasksByStatus(domain.TaskStatusCompleted)
+
+	// Column width
+	colWidth := 25
+
+	// Header - use max(0, ...) to prevent negative repeat counts
+	newPadding := colWidth - 10 - len(fmt.Sprintf("%d", len(newTasks)))
+	if newPadding < 0 {
+		newPadding = 0
+	}
+	workingPadding := colWidth - 13 - len(fmt.Sprintf("%d", len(workingTasks)))
+	if workingPadding < 0 {
+		workingPadding = 0
+	}
+	completedPadding := colWidth - 15 - len(fmt.Sprintf("%d", len(completedTasks)))
+	if completedPadding < 0 {
+		completedPadding = 0
+	}
+	s := fmt.Sprintf("┌─ New (%d) %s┬─ Working (%d) %s┬─ Completed (%d) %s┐\n",
+		len(newTasks), strings.Repeat("─", newPadding),
+		len(workingTasks), strings.Repeat("─", workingPadding),
+		len(completedTasks), strings.Repeat("─", completedPadding),
+	)
+
+	// Find max rows
+	maxRows := len(newTasks)
+	if len(workingTasks) > maxRows {
+		maxRows = len(workingTasks)
+	}
+	if len(completedTasks) > maxRows {
+		maxRows = len(completedTasks)
+	}
+	if maxRows == 0 {
+		maxRows = 1
+	}
+
+	// Render rows
+	for i := 0; i < maxRows; i++ {
+		s += "│"
+		s += m.renderKanbanCell(newTasks, i, 0, colWidth)
+		s += "│"
+		s += m.renderKanbanCell(workingTasks, i, 1, colWidth)
+		s += "│"
+		s += m.renderKanbanCell(completedTasks, i, 2, colWidth)
+		s += "│\n"
+	}
+
+	// Footer
+	s += fmt.Sprintf("└%s┴%s┴%s┘\n",
+		strings.Repeat("─", colWidth),
+		strings.Repeat("─", colWidth),
+		strings.Repeat("─", colWidth),
+	)
+
+	// Status bar
+	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [v]リスト [?]ヘルプ [q]終了"
+	s += "\n" + styles.StatusBar.Render(helpText) + "\n"
+
+	return s
+}
+
+func (m *Model) renderKanbanCell(tasks []*domain.Task, row, col, width int) string {
+	if row >= len(tasks) {
+		return strings.Repeat(" ", width)
+	}
+
+	task := tasks[row]
+	isSelected := m.kanbanColumn == col && m.kanbanCursors[col] == row
+
+	// Priority indicator
+	var priorityText string
+	var priorityStyle lipgloss.Style
+	switch task.Priority {
+	case domain.PriorityHigh:
+		priorityStyle = styles.PriorityHigh
+		priorityText = "高"
+	case domain.PriorityMedium:
+		priorityStyle = styles.PriorityMedium
+		priorityText = "中"
+	case domain.PriorityLow:
+		priorityStyle = styles.PriorityLow
+		priorityText = "低"
+	}
+
+	// Truncate title if needed (use rune count for proper Unicode handling)
+	title := task.Title
+	maxTitleLen := width - 6 // "[優] " + padding
+	if utf8.RuneCountInString(title) > maxTitleLen {
+		// Truncate by runes, not bytes, to avoid splitting multi-byte characters
+		runes := []rune(title)
+		title = string(runes[:maxTitleLen-2]) + ".."
+	}
+
+	cell := fmt.Sprintf("[%s] %s", priorityStyle.Render(priorityText), title)
+
+	// Pad to width
+	cellLen := len(fmt.Sprintf("[%s] %s", priorityText, title))
+	if cellLen < width {
+		cell += strings.Repeat(" ", width-cellLen)
+	}
+
+	if isSelected {
+		cell = styles.Selected.Render(cell)
+	}
+
+	return cell
 }
 
 func (m *Model) viewHelp() string {
