@@ -220,6 +220,35 @@ func TestTask_Validate(t *testing.T) {
 			wantErr: true,
 			errMsg:  "description must be 1000 characters or less",
 		},
+		{
+			name: "whitespace-only title",
+			task: &Task{
+				Title:    "   ",
+				Status:   TaskStatusNew,
+				Priority: PriorityMedium,
+			},
+			wantErr: true,
+			errMsg:  "title is required",
+		},
+		{
+			name: "title exactly 200 characters",
+			task: &Task{
+				Title:    strings.Repeat("a", 200),
+				Status:   TaskStatusNew,
+				Priority: PriorityMedium,
+			},
+			wantErr: false,
+		},
+		{
+			name: "description exactly 1000 characters",
+			task: &Task{
+				Title:       "Test Task",
+				Description: strings.Repeat("a", 1000),
+				Status:      TaskStatusNew,
+				Priority:    PriorityMedium,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

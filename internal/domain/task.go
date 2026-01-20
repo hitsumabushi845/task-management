@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -69,7 +70,7 @@ type Task struct {
 
 // Validate checks if the task has valid data
 func (t *Task) Validate() error {
-	if t.Title == "" {
+	if strings.TrimSpace(t.Title) == "" {
 		return errors.New("title is required")
 	}
 
