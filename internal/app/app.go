@@ -264,9 +264,19 @@ func (m *Model) View() string {
 		return "Error: " + m.err.Error() + "\n\nPress q to quit.\n"
 	}
 
+	// Help modal overlay
+	if m.mode == viewModeHelp {
+		return m.viewHelp()
+	}
+
 	// Create mode view
 	if m.mode == viewModeCreate {
 		return m.viewCreate()
+	}
+
+	// Kanban mode view
+	if m.mode == viewModeKanban {
+		return m.viewKanban()
 	}
 
 	// List mode view
@@ -355,6 +365,63 @@ func (m *Model) viewCreate() string {
 
 	helpText := "[Enter]作成 [Esc]キャンセル [Tab]優先度"
 	s += styles.StatusBar.Render(helpText) + "\n"
+
+	return s
+}
+
+func (m *Model) viewKanban() string {
+	return "Kanban view (coming soon)\n\nPress 'v' to switch to list view, '?' for help, 'q' to quit.\n"
+}
+
+func (m *Model) viewHelp() string {
+	var s string
+
+	if m.previousMode == viewModeKanban {
+		s = `┌─ ヘルプ - カンバンビュー ───────────────┐
+│                                        │
+│ 移動:                                  │
+│   h/←      : 左の列へ                  │
+│   l/→      : 右の列へ                  │
+│   j/↓      : 列内で下へ                │
+│   k/↑      : 列内で上へ                │
+│                                        │
+│ タスク操作:                            │
+│   Enter    : 次のステータスへ移動      │
+│   e        : タスク編集                │
+│   n        : 新規タスク作成            │
+│   d        : タスク削除                │
+│                                        │
+│ 表示:                                  │
+│   v        : リストビューへ切替        │
+│   f        : フィルタ設定              │
+│   s        : ソート設定                │
+│   ?/F1     : このヘルプ                │
+│   q        : 終了                      │
+│                                        │
+│         [Esc または ? で閉じる]        │
+└────────────────────────────────────────┘`
+	} else {
+		s = `┌─ ヘルプ - リストビュー ─────────────────┐
+│                                        │
+│ 移動:                                  │
+│   j/↓      : 下へ移動                  │
+│   k/↑      : 上へ移動                  │
+│                                        │
+│ タスク操作:                            │
+│   Space    : ステータス切替            │
+│   n        : 新規タスク作成            │
+│   d        : タスク削除                │
+│                                        │
+│ 表示:                                  │
+│   v        : カンバンビューへ切替      │
+│   f        : フィルタ設定              │
+│   s        : ソート設定                │
+│   ?/F1     : このヘルプ                │
+│   q        : 終了                      │
+│                                        │
+│         [Esc または ? で閉じる]        │
+└────────────────────────────────────────┘`
+	}
 
 	return s
 }
