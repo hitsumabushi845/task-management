@@ -38,6 +38,9 @@ type Model struct {
 	// Kanban view state
 	kanbanColumn  int    // 0=New, 1=Working, 2=Completed
 	kanbanCursors [3]int // Cursor position within each column
+	// Filter state
+	filter       domain.Filter
+	filterCursor int
 }
 
 // New creates a new application model
@@ -121,8 +124,10 @@ func (m *Model) toggleTaskStatus(task *domain.Task) tea.Cmd {
 }
 
 func (m *Model) tasksByStatus(status domain.TaskStatus) []*domain.Task {
+	// Apply filter first
+	filtered := m.filter.Apply(m.tasks)
 	var result []*domain.Task
-	for _, task := range m.tasks {
+	for _, task := range filtered {
 		if task.Status == status {
 			result = append(result, task)
 		}
@@ -146,6 +151,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = m.previousMode
 			}
 			return m, nil
+		}
+
+		// Handle filter mode
+		if m.mode == viewModeFilter {
+			return m.updateFilterMode(msg)
 		}
 
 		// Handle kanban mode
@@ -195,6 +205,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.mode == viewModeKanban {
 				m.mode = viewModeList
 			}
+
+		case "f":
+			// Open filter modal
+			m.previousMode = m.mode
+			m.mode = viewModeFilter
+			m.filterCursor = 0
 
 		case "?", "f1":
 			// Show help modal
@@ -349,6 +365,11 @@ func (m *Model) updateKanbanMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "v":
 		m.mode = viewModeList
 
+	case "f":
+		m.previousMode = m.mode
+		m.mode = viewModeFilter
+		m.filterCursor = 0
+
 	case "?", "f1":
 		m.previousMode = m.mode
 		m.mode = viewModeHelp
@@ -398,6 +419,11 @@ func (m *Model) View() string {
 		return m.viewCreate()
 	}
 
+	// Filter mode view
+	if m.mode == viewModeFilter {
+		return m.viewFilter()
+	}
+
 	// Kanban mode view
 	if m.mode == viewModeKanban {
 		return m.viewKanban()
@@ -408,12 +434,23 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewList() string {
-	s := "Task Management\n\n"
+	s := "Task Management"
+	if !m.filter.IsEmpty() {
+		s += " (フィルタ適用中)"
+	}
+	s += "\n\n"
 
-	if len(m.tasks) == 0 {
-		s += "No tasks yet. Press 'n' to create one.\n\n"
+	// Apply filter to tasks
+	filteredTasks := m.filter.Apply(m.tasks)
+
+	if len(filteredTasks) == 0 {
+		if len(m.tasks) == 0 {
+			s += "No tasks yet. Press 'n' to create one.\n\n"
+		} else {
+			s += "フィルタに一致するタスクがありません。\n\n"
+		}
 	} else {
-		for i, task := range m.tasks {
+		for i, task := range filteredTasks {
 			// Status icon
 			var statusIcon string
 			var statusStyle lipgloss.Style
@@ -464,7 +501,7 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]新規 [d]削除 [Space]ステータス [↑/k]上 [↓/j]下 [q]終了"
+	helpText := "[n]新規 [d]削除 [Space]ステータス [f]フィルタ [↑/k]上 [↓/j]下 [q]終了"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -498,6 +535,12 @@ func (m *Model) viewKanban() string {
 	workingTasks := m.tasksByStatus(domain.TaskStatusWorking)
 	completedTasks := m.tasksByStatus(domain.TaskStatusCompleted)
 
+	// Filter indicator
+	var s string
+	if !m.filter.IsEmpty() {
+		s = "(フィルタ適用中)\n"
+	}
+
 	// Column width
 	colWidth := 25
 
@@ -514,7 +557,7 @@ func (m *Model) viewKanban() string {
 	if completedPadding < 0 {
 		completedPadding = 0
 	}
-	s := fmt.Sprintf("┌─ New (%d) %s┬─ Working (%d) %s┬─ Completed (%d) %s┐\n",
+	s += fmt.Sprintf("┌─ New (%d) %s┬─ Working (%d) %s┬─ Completed (%d) %s┐\n",
 		len(newTasks), strings.Repeat("─", newPadding),
 		len(workingTasks), strings.Repeat("─", workingPadding),
 		len(completedTasks), strings.Repeat("─", completedPadding),
@@ -551,7 +594,7 @@ func (m *Model) viewKanban() string {
 	)
 
 	// Status bar
-	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [v]リスト [?]ヘルプ [q]終了"
+	helpText := "[h/l]列移動 [j/k]上下 [Enter]次へ [f]フィルタ [v]リスト [?]ヘルプ [q]終了"
 	s += "\n" + styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -655,4 +698,231 @@ func (m *Model) viewHelp() string {
 	}
 
 	return s
+}
+
+func (m *Model) viewFilter() string {
+	s := "┌─ フィルタ設定 ─────────────────────────┐\n"
+	s += "│                                        │\n"
+
+	// Status checkboxes (cursor 0-2)
+	s += "│ ステータス:                            │\n"
+	statusLabels := []string{"New", "Working", "Completed"}
+	statusValues := []domain.TaskStatus{domain.TaskStatusNew, domain.TaskStatusWorking, domain.TaskStatusCompleted}
+	for i, label := range statusLabels {
+		checked := m.hasFilterStatus(statusValues[i])
+		checkbox := "[ ]"
+		if checked {
+			checkbox = "[x]"
+		}
+		cursor := "  "
+		if m.filterCursor == i {
+			cursor = "> "
+		}
+		line := fmt.Sprintf("%s%s %s", cursor, checkbox, label)
+		padding := 38 - len(line)
+		if padding < 0 {
+			padding = 0
+		}
+		s += fmt.Sprintf("│ %s%s │\n", line, strings.Repeat(" ", padding))
+	}
+
+	s += "│                                        │\n"
+
+	// Priority checkboxes (cursor 3-5)
+	s += "│ 優先度:                                │\n"
+	priorityLabels := []string{"高", "中", "低"}
+	priorityValues := []domain.Priority{domain.PriorityHigh, domain.PriorityMedium, domain.PriorityLow}
+	for i, label := range priorityLabels {
+		checked := m.hasFilterPriority(priorityValues[i])
+		checkbox := "[ ]"
+		if checked {
+			checkbox = "[x]"
+		}
+		cursor := "  "
+		if m.filterCursor == 3+i {
+			cursor = "> "
+		}
+		line := fmt.Sprintf("%s%s %s", cursor, checkbox, label)
+		padding := 38 - len(line)
+		if padding < 0 {
+			padding = 0
+		}
+		s += fmt.Sprintf("│ %s%s │\n", line, strings.Repeat(" ", padding))
+	}
+
+	s += "│                                        │\n"
+
+	// Date range radio buttons (cursor 6-10)
+	s += "│ 期限:                                  │\n"
+	dateLabels := []string{"すべて", "今日", "今週", "期限切れ", "期限なし"}
+	dateValues := []domain.DateRange{domain.DateRangeAll, domain.DateRangeToday, domain.DateRangeThisWeek, domain.DateRangeOverdue, domain.DateRangeNoDueDate}
+	for i, label := range dateLabels {
+		selected := m.filter.DateRange == dateValues[i]
+		radio := "( )"
+		if selected {
+			radio = "(o)"
+		}
+		cursor := "  "
+		if m.filterCursor == 6+i {
+			cursor = "> "
+		}
+		line := fmt.Sprintf("%s%s %s", cursor, radio, label)
+		// Account for multi-byte characters in padding calculation
+		runeCount := len(cursor) + len(radio) + 1 + len([]rune(label))
+		padding := 38 - runeCount
+		if padding < 0 {
+			padding = 0
+		}
+		s += fmt.Sprintf("│ %s%s │\n", line, strings.Repeat(" ", padding))
+	}
+
+	s += "│                                        │\n"
+
+	// Search text field (cursor 11)
+	searchCursor := "  "
+	if m.filterCursor == 11 {
+		searchCursor = "> "
+	}
+	searchLine := fmt.Sprintf("%s検索: %s█", searchCursor, m.filter.SearchText)
+	searchRuneCount := len(searchCursor) + len("検索: ") + len([]rune(m.filter.SearchText)) + 1
+	searchPadding := 38 - searchRuneCount
+	if searchPadding < 0 {
+		searchPadding = 0
+	}
+	s += fmt.Sprintf("│ %s%s │\n", searchLine, strings.Repeat(" ", searchPadding))
+
+	s += "│                                        │\n"
+
+	// Clear button (cursor 12)
+	clearCursor := "  "
+	if m.filterCursor == 12 {
+		clearCursor = "> "
+	}
+	clearLine := fmt.Sprintf("%s[クリア]", clearCursor)
+	clearRuneCount := len(clearCursor) + len("[クリア]")
+	clearPadding := 38 - clearRuneCount
+	if clearPadding < 0 {
+		clearPadding = 0
+	}
+	s += fmt.Sprintf("│ %s%s │\n", clearLine, strings.Repeat(" ", clearPadding))
+
+	s += "│                                        │\n"
+	s += "│   [j/k]移動 [Space]選択 [Enter]適用   │\n"
+	s += "│   [Esc]キャンセル                      │\n"
+	s += "└────────────────────────────────────────┘"
+
+	return s
+}
+
+// updateFilterMode handles input in filter mode
+func (m *Model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	const maxCursor = 12
+
+	switch msg.String() {
+	case "j", "down":
+		if m.filterCursor < maxCursor {
+			m.filterCursor++
+		}
+
+	case "k", "up":
+		if m.filterCursor > 0 {
+			m.filterCursor--
+		}
+
+	case " ":
+		// Toggle selection based on cursor position
+		switch {
+		case m.filterCursor >= 0 && m.filterCursor <= 2:
+			// Status toggle
+			statusValues := []domain.TaskStatus{domain.TaskStatusNew, domain.TaskStatusWorking, domain.TaskStatusCompleted}
+			m.toggleFilterStatus(statusValues[m.filterCursor])
+		case m.filterCursor >= 3 && m.filterCursor <= 5:
+			// Priority toggle
+			priorityValues := []domain.Priority{domain.PriorityHigh, domain.PriorityMedium, domain.PriorityLow}
+			m.toggleFilterPriority(priorityValues[m.filterCursor-3])
+		case m.filterCursor >= 6 && m.filterCursor <= 10:
+			// Date range selection (radio button)
+			dateValues := []domain.DateRange{domain.DateRangeAll, domain.DateRangeToday, domain.DateRangeThisWeek, domain.DateRangeOverdue, domain.DateRangeNoDueDate}
+			m.filter.DateRange = dateValues[m.filterCursor-6]
+		case m.filterCursor == 12:
+			// Clear filter
+			m.filter = domain.Filter{}
+		}
+
+	case "enter":
+		// Apply filter and close
+		m.mode = m.previousMode
+
+	case "esc":
+		// Cancel and close (keep current filter)
+		m.mode = m.previousMode
+
+	case "backspace":
+		// Delete character from search text
+		if m.filterCursor == 11 && len(m.filter.SearchText) > 0 {
+			// Handle multi-byte characters properly
+			runes := []rune(m.filter.SearchText)
+			m.filter.SearchText = string(runes[:len(runes)-1])
+		}
+
+	default:
+		// Character input for search text
+		if m.filterCursor == 11 {
+			if len(msg.String()) == 1 {
+				m.filter.SearchText += msg.String()
+			} else if msg.Type == tea.KeySpace {
+				m.filter.SearchText += " "
+			} else if msg.Type == tea.KeyRunes {
+				m.filter.SearchText += string(msg.Runes)
+			}
+		}
+	}
+
+	return m, nil
+}
+
+// hasFilterStatus checks if a status is in the filter
+func (m *Model) hasFilterStatus(status domain.TaskStatus) bool {
+	for _, s := range m.filter.Statuses {
+		if s == status {
+			return true
+		}
+	}
+	return false
+}
+
+// hasFilterPriority checks if a priority is in the filter
+func (m *Model) hasFilterPriority(priority domain.Priority) bool {
+	for _, p := range m.filter.Priorities {
+		if p == priority {
+			return true
+		}
+	}
+	return false
+}
+
+// toggleFilterStatus toggles a status in the filter
+func (m *Model) toggleFilterStatus(status domain.TaskStatus) {
+	for i, s := range m.filter.Statuses {
+		if s == status {
+			// Remove status
+			m.filter.Statuses = append(m.filter.Statuses[:i], m.filter.Statuses[i+1:]...)
+			return
+		}
+	}
+	// Add status
+	m.filter.Statuses = append(m.filter.Statuses, status)
+}
+
+// toggleFilterPriority toggles a priority in the filter
+func (m *Model) toggleFilterPriority(priority domain.Priority) {
+	for i, p := range m.filter.Priorities {
+		if p == priority {
+			// Remove priority
+			m.filter.Priorities = append(m.filter.Priorities[:i], m.filter.Priorities[i+1:]...)
+			return
+		}
+	}
+	// Add priority
+	m.filter.Priorities = append(m.filter.Priorities, priority)
 }
