@@ -16,6 +16,9 @@ type viewMode int
 const (
 	viewModeList viewMode = iota
 	viewModeCreate
+	viewModeKanban
+	viewModeFilter
+	viewModeHelp
 )
 
 // Model is the root application model
@@ -27,6 +30,7 @@ type Model struct {
 	height        int
 	err           error
 	mode          viewMode
+	previousMode  viewMode
 	inputTitle    string
 	inputPriority domain.Priority
 }
@@ -120,6 +124,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateCreateMode(msg)
 		}
 
+		// Handle help mode
+		if m.mode == viewModeHelp {
+			switch msg.String() {
+			case "esc", "?", "f1":
+				m.mode = m.previousMode
+			}
+			return m, nil
+		}
+
 		// List mode key handlers
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -154,6 +167,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task := m.tasks[m.cursor]
 				return m, m.toggleTaskStatus(task)
 			}
+
+		case "v":
+			// Toggle between list and kanban view
+			if m.mode == viewModeList {
+				m.mode = viewModeKanban
+			} else if m.mode == viewModeKanban {
+				m.mode = viewModeList
+			}
+
+		case "?", "f1":
+			// Show help modal
+			m.previousMode = m.mode
+			m.mode = viewModeHelp
 		}
 
 	case taskListLoadedMsg:
