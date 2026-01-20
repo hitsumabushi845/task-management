@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -83,6 +84,33 @@ func (m *Model) deleteTask(id int64) tea.Cmd {
 	}
 }
 
+// toggleTaskStatus toggles the task status: new -> working -> completed -> new
+func (m *Model) toggleTaskStatus(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		// Update status and timestamps
+		now := time.Now()
+		switch task.Status {
+		case domain.TaskStatusNew:
+			task.Status = domain.TaskStatusWorking
+			task.StartedAt = &now
+		case domain.TaskStatusWorking:
+			task.Status = domain.TaskStatusCompleted
+			task.CompletedAt = &now
+		case domain.TaskStatusCompleted:
+			task.Status = domain.TaskStatusNew
+			task.StartedAt = nil
+			task.CompletedAt = nil
+		}
+
+		err := m.repo.Update(context.Background(), task)
+		if err != nil {
+			return errMsg{err: err}
+		}
+
+		return taskUpdatedMsg{task: task}
+	}
+}
+
 // Update handles messages and updates the model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -119,6 +147,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task := m.tasks[m.cursor]
 				return m, m.deleteTask(task.ID)
 			}
+
+		case " ":
+			// Toggle task status
+			if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
+				task := m.tasks[m.cursor]
+				return m, m.toggleTaskStatus(task)
+			}
 		}
 
 	case taskListLoadedMsg:
@@ -136,6 +171,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case taskDeletedMsg:
 		// Task deleted, reload list
+		return m, m.loadTasks()
+
+	case taskUpdatedMsg:
+		// Task updated, reload list
 		return m, m.loadTasks()
 
 	case errMsg:
@@ -265,7 +304,7 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]新規 [d]削除 [↑/k]上 [↓/j]下 [q]終了"
+	helpText := "[n]新規 [d]削除 [Space]ステータス [↑/k]上 [↓/j]下 [q]終了"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
