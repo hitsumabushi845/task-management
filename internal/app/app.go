@@ -173,6 +173,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFilterMode(msg)
 		}
 
+		// Handle edit mode
+		if m.mode == viewModeEdit {
+			return m.updateEditMode(msg)
+		}
+
 		// Handle kanban mode
 		if m.mode == viewModeKanban {
 			return m.updateKanbanMode(msg)
@@ -500,6 +505,78 @@ func (m *Model) startEditMode(task *domain.Task) {
 	}
 	m.editError = ""
 	m.mode = viewModeEdit
+}
+
+// updateEditMode handles input in edit mode
+func (m *Model) updateEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// If editing a text field, handle text input
+	if m.editingField {
+		return m.updateEditFieldInput(msg)
+	}
+
+	// Navigation mode
+	switch msg.String() {
+	case "j", "down":
+		if m.editCursor < 5 {
+			m.editCursor++
+		}
+
+	case "k", "up":
+		if m.editCursor > 0 {
+			m.editCursor--
+		}
+
+	case "enter":
+		switch m.editCursor {
+		case 0, 1, 3:
+			// Start editing text field (title, description, due date)
+			m.editingField = true
+		case 2:
+			// Priority - cycle on Enter
+			m.cyclePriority()
+		case 4:
+			// Save button
+			return m.saveEditedTask()
+		case 5:
+			// Cancel button
+			m.mode = viewModeList
+			m.editError = ""
+		}
+
+	case "tab":
+		// Cycle priority when on priority field
+		if m.editCursor == 2 {
+			m.cyclePriority()
+		}
+
+	case "esc":
+		// Cancel edit
+		m.mode = viewModeList
+		m.editError = ""
+	}
+
+	return m, nil
+}
+
+func (m *Model) cyclePriority() {
+	switch m.editPriority {
+	case domain.PriorityLow:
+		m.editPriority = domain.PriorityMedium
+	case domain.PriorityMedium:
+		m.editPriority = domain.PriorityHigh
+	case domain.PriorityHigh:
+		m.editPriority = domain.PriorityLow
+	}
+}
+
+// updateEditFieldInput handles text input while editing a field (stub for Task 7)
+func (m *Model) updateEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	return m, nil
+}
+
+// saveEditedTask saves the edited task to the repository (stub for Task 8)
+func (m *Model) saveEditedTask() (tea.Model, tea.Cmd) {
+	return m, nil
 }
 
 // View renders the application
