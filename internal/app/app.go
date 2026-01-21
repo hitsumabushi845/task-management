@@ -523,6 +523,11 @@ func (m *Model) View() string {
 		return m.viewFilter()
 	}
 
+	// Edit mode view
+	if m.mode == viewModeEdit {
+		return m.viewEdit()
+	}
+
 	// Kanban mode view
 	if m.mode == viewModeKanban {
 		return m.viewKanban()
@@ -1068,4 +1073,93 @@ func (m *Model) viewSortMenu() string {
 
 	s += "└─────────────────────┘\n"
 	return s
+}
+
+func (m *Model) viewEdit() string {
+	s := "┌─ Edit Task ───────────────────────────┐\n"
+	s += "│                                        │\n"
+
+	// Field labels with cursor indicator
+	fields := []struct {
+		label string
+		value string
+	}{
+		{"Title", m.editTitle},
+		{"Description", m.editDesc},
+		{"Priority", m.editPriority.String()},
+		{"Due Date", m.editDueDate},
+	}
+
+	for i, field := range fields {
+		cursor := "  "
+		if m.editCursor == i {
+			cursor = "> "
+		}
+
+		// Show value with cursor if editing this field
+		value := field.value
+		if i == 2 {
+			// Priority - show as selector
+			value = m.renderPrioritySelector()
+		}
+		if m.editCursor == i && m.editingField && i != 2 {
+			value += "█"
+		}
+		if value == "" && i != 2 {
+			value = "(empty)"
+		}
+
+		// Truncate long values for display
+		maxValueLen := 24
+		displayValue := value
+		if len(displayValue) > maxValueLen {
+			displayValue = displayValue[:maxValueLen-2] + ".."
+		}
+
+		line := fmt.Sprintf("%s%-12s %s", cursor, field.label+":", displayValue)
+		padding := 38 - len(line)
+		if padding < 0 {
+			padding = 0
+		}
+		s += fmt.Sprintf("│ %s%s │\n", line, strings.Repeat(" ", padding))
+	}
+
+	s += "│                                        │\n"
+
+	// Save and Cancel buttons
+	saveCursor := "  "
+	cancelCursor := "  "
+	if m.editCursor == 4 {
+		saveCursor = "> "
+	}
+	if m.editCursor == 5 {
+		cancelCursor = "> "
+	}
+	s += fmt.Sprintf("│   %s[Save]  %s[Cancel]                 │\n", saveCursor, cancelCursor)
+
+	// Error message if any
+	if m.editError != "" {
+		s += "│                                        │\n"
+		errorLine := fmt.Sprintf("│ Error: %-30s │\n", m.editError)
+		s += errorLine
+	}
+
+	s += "│                                        │\n"
+	s += "│ [j/k]Move [Enter]Edit [Esc]Cancel      │\n"
+	s += "└────────────────────────────────────────┘"
+
+	return s
+}
+
+func (m *Model) renderPrioritySelector() string {
+	switch m.editPriority {
+	case domain.PriorityHigh:
+		return styles.PriorityHigh.Render("[H]") + " M L"
+	case domain.PriorityMedium:
+		return "H " + styles.PriorityMedium.Render("[M]") + " L"
+	case domain.PriorityLow:
+		return "H M " + styles.PriorityLow.Render("[L]")
+	default:
+		return "H M L"
+	}
 }
