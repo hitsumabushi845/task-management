@@ -991,19 +991,40 @@ func (m *Model) renderKanbanCell(tasks []*domain.Task, row, col, width int) stri
 		priorityText = "L"
 	}
 
-	// Truncate title if needed (use rune count for proper Unicode handling)
+	// Category
+	catName := m.getCategoryName(task)
+	catDisplay := ""
+	if catName != "" {
+		// Truncate category name if needed (use rune count for Unicode support)
+		if utf8.RuneCountInString(catName) > 8 {
+			runes := []rune(catName)
+			catName = string(runes[:7]) + "."
+		}
+		catDisplay = "@" + catName
+	}
+
+	// Truncate title if needed
 	title := task.Title
-	maxTitleLen := width - 6 // "[優] " + padding
+	// Account for priority [P] + space + category
+	maxTitleLen := width - 5 - len(catDisplay)
+	if maxTitleLen < 5 {
+		maxTitleLen = 5
+	}
 	if utf8.RuneCountInString(title) > maxTitleLen {
-		// Truncate by runes, not bytes, to avoid splitting multi-byte characters
 		runes := []rune(title)
 		title = string(runes[:maxTitleLen-2]) + ".."
 	}
 
 	cell := fmt.Sprintf("[%s] %s", priorityStyle.Render(priorityText), title)
+	if catDisplay != "" {
+		cell += " " + catDisplay
+	}
 
 	// Pad to width
-	cellLen := len(fmt.Sprintf("[%s] %s", priorityText, title))
+	cellLen := 4 + len(title) + len(catDisplay)
+	if catDisplay != "" {
+		cellLen++ // space before category
+	}
 	if cellLen < width {
 		cell += strings.Repeat(" ", width-cellLen)
 	}
