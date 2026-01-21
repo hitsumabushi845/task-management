@@ -468,6 +468,23 @@ func (m *Model) advanceTaskStatus(task *domain.Task) tea.Cmd {
 	}
 }
 
+// startEditMode initializes edit mode with the given task
+func (m *Model) startEditMode(task *domain.Task) {
+	m.editTask = task
+	m.editCursor = 0
+	m.editingField = false
+	m.editTitle = task.Title
+	m.editDesc = task.Description
+	m.editPriority = task.Priority
+	if task.DueDate != nil {
+		m.editDueDate = task.DueDate.Format("2006-01-02")
+	} else {
+		m.editDueDate = ""
+	}
+	m.editError = ""
+	m.mode = viewModeEdit
+}
+
 // View renders the application
 func (m *Model) View() string {
 	if m.err != nil {
