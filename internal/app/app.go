@@ -21,6 +21,7 @@ const (
 	viewModeKanban
 	viewModeFilter
 	viewModeHelp
+	viewModeEdit
 )
 
 // Model is the root application model
@@ -44,6 +45,15 @@ type Model struct {
 	// Sort state
 	taskSort     domain.Sort
 	sortMenuOpen bool
+	// Edit state
+	editTask     *domain.Task    // Reference to task being edited
+	editCursor   int             // 0=title, 1=desc, 2=priority, 3=date, 4=save, 5=cancel
+	editingField bool            // Currently typing in a field
+	editTitle    string          // Edited title value
+	editDesc     string          // Edited description value
+	editPriority domain.Priority
+	editDueDate  string // String for input, parsed on save
+	editError    string // Validation error message
 }
 
 // New creates a new application model
