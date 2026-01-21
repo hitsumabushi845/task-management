@@ -828,10 +828,17 @@ func (m *Model) viewList() string {
 			}
 
 			// Build task line
-			line := fmt.Sprintf("%s [%s] %s",
+			catName := m.getCategoryName(task)
+			catDisplay := ""
+			if catName != "" {
+				catDisplay = " @" + catName
+			}
+
+			line := fmt.Sprintf("%s [%s] %s%s",
 				statusStyle.Render(statusIcon),
 				priorityStyle.Render(priorityText),
 				task.Title,
+				catDisplay,
 			)
 
 			// Highlight selected
@@ -1423,4 +1430,17 @@ func (m *Model) renderCategorySelector() string {
 		return "[" + m.categories[m.editCategoryIdx].Name + "]"
 	}
 	return "[None]"
+}
+
+// getCategoryName returns the category name for a task, or empty string if no category
+func (m *Model) getCategoryName(task *domain.Task) string {
+	if task.CategoryID == nil {
+		return ""
+	}
+	for _, cat := range m.categories {
+		if cat.ID == *task.CategoryID {
+			return cat.Name
+		}
+	}
+	return ""
 }
