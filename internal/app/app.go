@@ -34,8 +34,9 @@ type Model struct {
 	err           error
 	mode          viewMode
 	previousMode  viewMode
-	inputTitle    string
-	inputPriority domain.Priority
+	inputTitle       string
+	inputPriority    domain.Priority
+	inputCategoryIdx int // Index into categories slice, -1 for no category
 	// Kanban view state
 	kanbanColumn  int    // 0=New, 1=Working, 2=Completed
 	kanbanCursors [3]int // Cursor position within each column
@@ -94,12 +95,18 @@ func (m *Model) loadCategories() tea.Cmd {
 }
 
 // createTask creates a new task
-func (m *Model) createTask(title string, priority domain.Priority) tea.Cmd {
+func (m *Model) createTask(title string, priority domain.Priority, categoryIdx int) tea.Cmd {
 	return func() tea.Msg {
 		task := &domain.Task{
 			Title:    title,
 			Status:   domain.TaskStatusNew,
 			Priority: priority,
+		}
+
+		// Set category if selected
+		if categoryIdx >= 0 && categoryIdx < len(m.categories) {
+			catID := m.categories[categoryIdx].ID
+			task.CategoryID = &catID
 		}
 
 		err := m.repo.Create(context.Background(), task)
@@ -216,6 +223,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = viewModeCreate
 			m.inputTitle = ""
 			m.inputPriority = domain.PriorityMedium
+			m.inputCategoryIdx = -1 // No category selected by default
 
 		case "d":
 			// Delete selected task
@@ -331,7 +339,7 @@ func (m *Model) updateCreateMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Create task
 		if m.inputTitle != "" {
 			m.mode = viewModeList
-			return m, m.createTask(m.inputTitle, m.inputPriority)
+			return m, m.createTask(m.inputTitle, m.inputPriority, m.inputCategoryIdx)
 		}
 
 	case "backspace":
@@ -348,6 +356,15 @@ func (m *Model) updateCreateMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inputPriority = domain.PriorityHigh
 		case domain.PriorityHigh:
 			m.inputPriority = domain.PriorityLow
+		}
+
+	case "shift+tab":
+		// Cycle category
+		if len(m.categories) > 0 {
+			m.inputCategoryIdx++
+			if m.inputCategoryIdx >= len(m.categories) {
+				m.inputCategoryIdx = -1 // Back to "None"
+			}
 		}
 
 	default:
@@ -424,6 +441,7 @@ func (m *Model) updateKanbanMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = viewModeCreate
 		m.inputTitle = ""
 		m.inputPriority = domain.PriorityMedium
+		m.inputCategoryIdx = -1 // No category selected by default
 
 	case "d":
 		col := m.kanbanColumn
@@ -822,7 +840,17 @@ func (m *Model) viewCreate() string {
 	}
 	s += "\n\n"
 
-	helpText := "[Enter]Create [Esc]Cancel [Tab]Priority"
+	// Category selection
+	s += "Category (Shift+Tab to cycle): "
+	if m.inputCategoryIdx < 0 {
+		s += "[None]"
+	} else if m.inputCategoryIdx < len(m.categories) {
+		cat := m.categories[m.inputCategoryIdx]
+		s += "[" + cat.Name + "]"
+	}
+	s += "\n\n"
+
+	helpText := "[Enter]Create [Esc]Cancel [Tab]Priority [Shift+Tab]Category"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
