@@ -47,14 +47,15 @@ type Model struct {
 	taskSort     domain.Sort
 	sortMenuOpen bool
 	// Edit state
-	editTask     *domain.Task    // Reference to task being edited
-	editCursor   int             // 0=title, 1=desc, 2=priority, 3=date, 4=save, 5=cancel
-	editingField bool            // Currently typing in a field
-	editTitle    string          // Edited title value
-	editDesc     string          // Edited description value
-	editPriority domain.Priority
-	editDueDate  string // String for input, parsed on save
-	editError    string // Validation error message
+	editTask        *domain.Task    // Reference to task being edited
+	editCursor      int             // 0=title, 1=desc, 2=priority, 3=category, 4=date, 5=save, 6=cancel
+	editingField    bool            // Currently typing in a field
+	editTitle       string          // Edited title value
+	editDesc        string          // Edited description value
+	editPriority    domain.Priority
+	editCategoryIdx int    // Index into categories slice, -1 for no category
+	editDueDate     string // String for input, parsed on save
+	editError       string // Validation error message
 	// Category state
 	categories []*domain.Category // All available categories
 }
@@ -533,6 +534,16 @@ func (m *Model) startEditMode(task *domain.Task) {
 	m.editTitle = task.Title
 	m.editDesc = task.Description
 	m.editPriority = task.Priority
+	// Find category index
+	m.editCategoryIdx = -1
+	if task.CategoryID != nil {
+		for i, cat := range m.categories {
+			if cat.ID == *task.CategoryID {
+				m.editCategoryIdx = i
+				break
+			}
+		}
+	}
 	if task.DueDate != nil {
 		m.editDueDate = task.DueDate.Format("2006-01-02")
 	} else {
@@ -552,7 +563,7 @@ func (m *Model) updateEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Navigation mode
 	switch msg.String() {
 	case "j", "down":
-		if m.editCursor < 5 {
+		if m.editCursor < 6 {
 			m.editCursor++
 		}
 
@@ -563,25 +574,26 @@ func (m *Model) updateEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		switch m.editCursor {
-		case 0, 1, 3:
-			// Start editing text field (title, description, due date)
+		case 0, 1, 4: // Title, Description, Due Date (due date moved to 4)
+			// Start editing text field
 			m.editingField = true
-		case 2:
-			// Priority - cycle on Enter
+		case 2: // Priority
 			m.cyclePriority()
-		case 4:
-			// Save button
+		case 3: // Category
+			m.cycleCategory()
+		case 5: // Save button
 			return m.saveEditedTask()
-		case 5:
-			// Cancel button
+		case 6: // Cancel button
 			m.mode = m.previousMode
 			m.editError = ""
 		}
 
 	case "tab":
-		// Cycle priority when on priority field
+		// Cycle priority or category depending on cursor
 		if m.editCursor == 2 {
 			m.cyclePriority()
+		} else if m.editCursor == 3 {
+			m.cycleCategory()
 		}
 
 	case "esc":
@@ -601,6 +613,16 @@ func (m *Model) cyclePriority() {
 		m.editPriority = domain.PriorityHigh
 	case domain.PriorityHigh:
 		m.editPriority = domain.PriorityLow
+	}
+}
+
+func (m *Model) cycleCategory() {
+	if len(m.categories) == 0 {
+		return
+	}
+	m.editCategoryIdx++
+	if m.editCategoryIdx >= len(m.categories) {
+		m.editCategoryIdx = -1
 	}
 }
 
@@ -624,7 +646,7 @@ func (m *Model) updateEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				runes := []rune(m.editDesc)
 				m.editDesc = string(runes[:len(runes)-1])
 			}
-		case 3: // Due Date
+		case 4: // Due Date (moved to position 4)
 			if len(m.editDueDate) > 0 {
 				m.editDueDate = m.editDueDate[:len(m.editDueDate)-1]
 			}
@@ -647,7 +669,7 @@ func (m *Model) updateEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.editTitle += char
 			case 1: // Description
 				m.editDesc += char
-			case 3: // Due Date
+			case 4: // Due Date (moved to position 4)
 				// Only allow date-like characters
 				if len(m.editDueDate) < 10 {
 					m.editDueDate += char
@@ -683,6 +705,14 @@ func (m *Model) saveEditedTask() (tea.Model, tea.Cmd) {
 	m.editTask.Description = m.editDesc
 	m.editTask.Priority = m.editPriority
 	m.editTask.DueDate = dueDate
+
+	// Update category
+	if m.editCategoryIdx >= 0 && m.editCategoryIdx < len(m.categories) {
+		catID := m.categories[m.editCategoryIdx].ID
+		m.editTask.CategoryID = &catID
+	} else {
+		m.editTask.CategoryID = nil
+	}
 
 	// Validate using domain validation
 	if err := m.editTask.Validate(); err != nil {
@@ -1303,7 +1333,8 @@ func (m *Model) viewEdit() string {
 	}{
 		{"Title", m.editTitle},
 		{"Description", m.editDesc},
-		{"Priority", m.editPriority.String()},
+		{"Priority", ""},    // Rendered specially
+		{"Category", ""},    // Rendered specially
 		{"Due Date", m.editDueDate},
 	}
 
@@ -1318,11 +1349,14 @@ func (m *Model) viewEdit() string {
 		if i == 2 {
 			// Priority - show as selector
 			value = m.renderPrioritySelector()
+		} else if i == 3 {
+			// Category - show as selector
+			value = m.renderCategorySelector()
 		}
-		if m.editCursor == i && m.editingField && i != 2 {
+		if m.editCursor == i && m.editingField && i != 2 && i != 3 {
 			value += "█"
 		}
-		if value == "" && i != 2 {
+		if value == "" && i != 2 && i != 3 {
 			value = "(empty)"
 		}
 
@@ -1346,10 +1380,10 @@ func (m *Model) viewEdit() string {
 	// Save and Cancel buttons
 	saveCursor := "  "
 	cancelCursor := "  "
-	if m.editCursor == 4 {
+	if m.editCursor == 5 {
 		saveCursor = "> "
 	}
-	if m.editCursor == 5 {
+	if m.editCursor == 6 {
 		cancelCursor = "> "
 	}
 	s += fmt.Sprintf("│   %s[Save]  %s[Cancel]                 │\n", saveCursor, cancelCursor)
@@ -1362,7 +1396,7 @@ func (m *Model) viewEdit() string {
 	}
 
 	s += "│                                        │\n"
-	s += "│ [j/k]Move [Enter]Edit [Esc]Cancel      │\n"
+	s += "│ [j/k]Move [Enter]Edit [Tab]Cycle [Esc] │\n"
 	s += "└────────────────────────────────────────┘"
 
 	return s
@@ -1379,4 +1413,14 @@ func (m *Model) renderPrioritySelector() string {
 	default:
 		return "H M L"
 	}
+}
+
+func (m *Model) renderCategorySelector() string {
+	if m.editCategoryIdx < 0 {
+		return "[None]"
+	}
+	if m.editCategoryIdx < len(m.categories) {
+		return "[" + m.categories[m.editCategoryIdx].Name + "]"
+	}
+	return "[None]"
 }
