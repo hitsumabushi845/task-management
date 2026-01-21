@@ -624,9 +624,52 @@ func (m *Model) updateEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// saveEditedTask saves the edited task to the repository (stub for Task 8)
+// saveEditedTask validates and saves the edited task
 func (m *Model) saveEditedTask() (tea.Model, tea.Cmd) {
-	return m, nil
+	// Validate title
+	if strings.TrimSpace(m.editTitle) == "" {
+		m.editError = "Title is required"
+		return m, nil
+	}
+
+	// Validate and parse due date
+	var dueDate *time.Time
+	if m.editDueDate != "" {
+		parsed, err := time.Parse("2006-01-02", m.editDueDate)
+		if err != nil {
+			m.editError = "Invalid date format (use YYYY-MM-DD)"
+			return m, nil
+		}
+		dueDate = &parsed
+	}
+
+	// Update task
+	m.editTask.Title = strings.TrimSpace(m.editTitle)
+	m.editTask.Description = m.editDesc
+	m.editTask.Priority = m.editPriority
+	m.editTask.DueDate = dueDate
+
+	// Validate using domain validation
+	if err := m.editTask.Validate(); err != nil {
+		m.editError = err.Error()
+		return m, nil
+	}
+
+	// Save to repository
+	m.mode = viewModeList
+	m.editError = ""
+	return m, m.updateTask(m.editTask)
+}
+
+// updateTask updates a task in the repository
+func (m *Model) updateTask(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		err := m.repo.Update(context.Background(), task)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		return taskUpdatedMsg{task: task}
+	}
 }
 
 // View renders the application
