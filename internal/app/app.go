@@ -206,6 +206,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.deleteTask(task.ID)
 			}
 
+		case "e":
+			// Edit selected task
+			filteredTasks := m.filter.Apply(m.tasks)
+			sortedTasks := m.taskSort.Apply(filteredTasks)
+			if len(sortedTasks) > 0 && m.cursor < len(sortedTasks) {
+				task := sortedTasks[m.cursor]
+				m.startEditMode(task)
+			}
+
 		case " ":
 			// Toggle task status
 			if len(m.tasks) > 0 && m.cursor < len(m.tasks) {
