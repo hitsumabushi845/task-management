@@ -1020,8 +1020,8 @@ func (m *Model) renderKanbanCell(tasks []*domain.Task, row, col, width int) stri
 		cell += " " + catDisplay
 	}
 
-	// Pad to width
-	cellLen := 4 + len(title) + len(catDisplay)
+	// Pad to width (use rune count for Unicode support)
+	cellLen := 4 + utf8.RuneCountInString(title) + utf8.RuneCountInString(catDisplay)
 	if catDisplay != "" {
 		cellLen++ // space before category
 	}
@@ -1448,15 +1448,18 @@ func (m *Model) viewEdit() string {
 			value = "(empty)"
 		}
 
-		// Truncate long values for display
+		// Truncate long values for display (use rune count for Unicode support)
 		maxValueLen := 24
 		displayValue := value
-		if len(displayValue) > maxValueLen {
-			displayValue = displayValue[:maxValueLen-2] + ".."
+		if utf8.RuneCountInString(displayValue) > maxValueLen {
+			runes := []rune(displayValue)
+			displayValue = string(runes[:maxValueLen-2]) + ".."
 		}
 
 		line := fmt.Sprintf("%s%-12s %s", cursor, field.label+":", displayValue)
-		padding := 38 - len(line)
+		// Use rune count for padding calculation
+		runeCount := len(cursor) + 12 + 1 + utf8.RuneCountInString(displayValue)
+		padding := 38 - runeCount
 		if padding < 0 {
 			padding = 0
 		}
