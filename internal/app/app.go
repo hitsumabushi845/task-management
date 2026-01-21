@@ -492,6 +492,7 @@ func (m *Model) advanceTaskStatus(task *domain.Task) tea.Cmd {
 
 // startEditMode initializes edit mode with the given task
 func (m *Model) startEditMode(task *domain.Task) {
+	m.previousMode = m.mode // Save current mode to return to after edit
 	m.editTask = task
 	m.editCursor = 0
 	m.editingField = false
@@ -539,7 +540,7 @@ func (m *Model) updateEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.saveEditedTask()
 		case 5:
 			// Cancel button
-			m.mode = viewModeList
+			m.mode = m.previousMode
 			m.editError = ""
 		}
 
@@ -551,7 +552,7 @@ func (m *Model) updateEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "esc":
 		// Cancel edit
-		m.mode = viewModeList
+		m.mode = m.previousMode
 		m.editError = ""
 	}
 
@@ -656,7 +657,7 @@ func (m *Model) saveEditedTask() (tea.Model, tea.Cmd) {
 	}
 
 	// Save to repository
-	m.mode = viewModeList
+	m.mode = m.previousMode
 	m.editError = ""
 	return m, m.updateTask(m.editTask)
 }
