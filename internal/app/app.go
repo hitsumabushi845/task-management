@@ -411,6 +411,14 @@ func (m *Model) updateKanbanMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.deleteTask(task.ID)
 		}
 
+	case "e":
+		// Edit selected task
+		col := m.kanbanColumn
+		if len(columns[col]) > 0 && m.kanbanCursors[col] < len(columns[col]) {
+			task := columns[col][m.kanbanCursors[col]]
+			m.startEditMode(task)
+		}
+
 	case "v":
 		m.mode = viewModeList
 
