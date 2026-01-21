@@ -54,6 +54,8 @@ type Model struct {
 	editPriority domain.Priority
 	editDueDate  string // String for input, parsed on save
 	editError    string // Validation error message
+	// Category state
+	categories []*domain.Category // All available categories
 }
 
 // New creates a new application model
@@ -66,7 +68,7 @@ func New(repo domain.TaskRepository) *Model {
 
 // Init initializes the application
 func (m *Model) Init() tea.Cmd {
-	return m.loadTasks()
+	return tea.Batch(m.loadTasks(), m.loadCategories())
 }
 
 // loadTasks loads all tasks from the repository
@@ -77,6 +79,17 @@ func (m *Model) loadTasks() tea.Cmd {
 			return errMsg{err: err}
 		}
 		return taskListLoadedMsg{tasks: tasks}
+	}
+}
+
+// loadCategories loads all categories from the repository
+func (m *Model) loadCategories() tea.Cmd {
+	return func() tea.Msg {
+		categories, err := m.repo.GetCategories(context.Background())
+		if err != nil {
+			return errMsg{err: err}
+		}
+		return categoriesLoadedMsg{categories: categories}
 	}
 }
 
@@ -280,6 +293,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor < 0 {
 			m.cursor = 0
 		}
+
+	case categoriesLoadedMsg:
+		m.categories = msg.categories
 
 	case taskCreatedMsg:
 		// Task created, reload list

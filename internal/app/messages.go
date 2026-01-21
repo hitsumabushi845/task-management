@@ -23,3 +23,8 @@ type taskDeletedMsg struct {
 type errMsg struct {
 	err error
 }
+
+// categoriesLoadedMsg is sent when categories are loaded
+type categoriesLoadedMsg struct {
+	categories []*domain.Category
+}
