@@ -782,7 +782,7 @@ func (m *Model) viewList() string {
 	}
 
 	// Status bar
-	helpText := "[n]New [d]Delete [Space]Status [f]Filter [s]Sort [↑/k]Up [↓/j]Down [q]Quit"
+	helpText := "[n]New [e]Edit [d]Delete [Space]Status [f]Filter [s]Sort [v]Kanban [?]Help [q]Quit"
 	s += styles.StatusBar.Render(helpText) + "\n"
 
 	return s
@@ -880,7 +880,7 @@ func (m *Model) viewKanban() string {
 	)
 
 	// Status bar
-	helpText := "[h/l]Column [j/k]Up/Down [Enter]Advance [f]Filter [s]Sort [v]List [?]Help [q]Quit"
+	helpText := "[h/l]Column [j/k]Up/Down [Enter]Advance [e]Edit [f]Filter [s]Sort [v]List [?]Help [q]Quit"
 	s += "\n" + styles.StatusBar.Render(helpText) + "\n"
 
 	return s
