@@ -947,6 +947,7 @@ func (m *Model) viewHelp() string {
 │                                        │
 │ Task Actions:                          │
 │   Enter    : Advance to next status    │
+│   e        : Edit task                 │
 │   n        : Create new task           │
 │   d        : Delete task               │
 │                                        │
@@ -968,6 +969,7 @@ func (m *Model) viewHelp() string {
 │                                        │
 │ Task Actions:                          │
 │   Space    : Toggle status             │
+│   e        : Edit task                 │
 │   n        : Create new task           │
 │   d        : Delete task               │
 │                                        │
