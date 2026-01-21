@@ -569,8 +569,58 @@ func (m *Model) cyclePriority() {
 	}
 }
 
-// updateEditFieldInput handles text input while editing a field (stub for Task 7)
+// updateEditFieldInput handles text input when editing a field
 func (m *Model) updateEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter", "esc":
+		// Stop editing this field
+		m.editingField = false
+
+	case "backspace":
+		// Delete character
+		switch m.editCursor {
+		case 0: // Title
+			if len(m.editTitle) > 0 {
+				runes := []rune(m.editTitle)
+				m.editTitle = string(runes[:len(runes)-1])
+			}
+		case 1: // Description
+			if len(m.editDesc) > 0 {
+				runes := []rune(m.editDesc)
+				m.editDesc = string(runes[:len(runes)-1])
+			}
+		case 3: // Due Date
+			if len(m.editDueDate) > 0 {
+				m.editDueDate = m.editDueDate[:len(m.editDueDate)-1]
+			}
+		}
+
+	default:
+		// Add character
+		var char string
+		if len(msg.String()) == 1 {
+			char = msg.String()
+		} else if msg.Type == tea.KeySpace {
+			char = " "
+		} else if msg.Type == tea.KeyRunes {
+			char = string(msg.Runes)
+		}
+
+		if char != "" {
+			switch m.editCursor {
+			case 0: // Title
+				m.editTitle += char
+			case 1: // Description
+				m.editDesc += char
+			case 3: // Due Date
+				// Only allow date-like characters
+				if len(m.editDueDate) < 10 {
+					m.editDueDate += char
+				}
+			}
+		}
+	}
+
 	return m, nil
 }
 
