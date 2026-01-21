@@ -1091,6 +1091,11 @@ func (m *Model) viewHelp() string {
 }
 
 func (m *Model) viewFilter() string {
+	// Dynamic cursor positions
+	categoryStartCursor := 11
+	searchCursor := categoryStartCursor + len(m.categories)
+	clearCursor := searchCursor + 1
+
 	s := "┌─ Filter Settings ─────────────────────┐\n"
 	s += "│                                        │\n"
 
@@ -1168,13 +1173,37 @@ func (m *Model) viewFilter() string {
 
 	s += "│                                        │\n"
 
-	// Search text field (cursor 11)
-	searchCursor := "  "
-	if m.filterCursor == 11 {
-		searchCursor = "> "
+	// Category checkboxes (cursor 11 + i for each category)
+	s += "│ Category:                              │\n"
+	for i, cat := range m.categories {
+		checked := m.hasFilterCategory(cat.ID)
+		checkbox := "[ ]"
+		if checked {
+			checkbox = "[x]"
+		}
+		cursor := "  "
+		if m.filterCursor == categoryStartCursor+i {
+			cursor = "> "
+		}
+		line := fmt.Sprintf("%s%s %s", cursor, checkbox, cat.Name)
+		// Use rune count for Unicode support
+		runeCount := len(cursor) + len(checkbox) + 1 + utf8.RuneCountInString(cat.Name)
+		padding := 38 - runeCount
+		if padding < 0 {
+			padding = 0
+		}
+		s += fmt.Sprintf("│ %s%s │\n", line, strings.Repeat(" ", padding))
 	}
-	searchLine := fmt.Sprintf("%sSearch: %s█", searchCursor, m.filter.SearchText)
-	searchRuneCount := len(searchCursor) + len("Search: ") + len([]rune(m.filter.SearchText)) + 1
+
+	s += "│                                        │\n"
+
+	// Search text field (dynamic cursor position)
+	searchCursorStr := "  "
+	if m.filterCursor == searchCursor {
+		searchCursorStr = "> "
+	}
+	searchLine := fmt.Sprintf("%sSearch: %s█", searchCursorStr, m.filter.SearchText)
+	searchRuneCount := len(searchCursorStr) + len("Search: ") + len([]rune(m.filter.SearchText)) + 1
 	searchPadding := 38 - searchRuneCount
 	if searchPadding < 0 {
 		searchPadding = 0
@@ -1183,13 +1212,13 @@ func (m *Model) viewFilter() string {
 
 	s += "│                                        │\n"
 
-	// Clear button (cursor 12)
-	clearCursor := "  "
-	if m.filterCursor == 12 {
-		clearCursor = "> "
+	// Clear button (dynamic cursor position)
+	clearCursorStr := "  "
+	if m.filterCursor == clearCursor {
+		clearCursorStr = "> "
 	}
-	clearLine := fmt.Sprintf("%s[Clear]", clearCursor)
-	clearRuneCount := len(clearCursor) + len("[Clear]")
+	clearLine := fmt.Sprintf("%s[Clear]", clearCursorStr)
+	clearRuneCount := len(clearCursorStr) + len("[Clear]")
 	clearPadding := 38 - clearRuneCount
 	if clearPadding < 0 {
 		clearPadding = 0
@@ -1206,7 +1235,11 @@ func (m *Model) viewFilter() string {
 
 // updateFilterMode handles input in filter mode
 func (m *Model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	const maxCursor = 12
+	// Dynamic cursor positions
+	categoryStartCursor := 11
+	searchCursor := categoryStartCursor + len(m.categories)
+	clearCursor := searchCursor + 1
+	maxCursor := clearCursor
 
 	switch msg.String() {
 	case "j", "down":
@@ -1234,7 +1267,13 @@ func (m *Model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Date range selection (radio button)
 			dateValues := []domain.DateRange{domain.DateRangeAll, domain.DateRangeToday, domain.DateRangeThisWeek, domain.DateRangeOverdue, domain.DateRangeNoDueDate}
 			m.filter.DateRange = dateValues[m.filterCursor-6]
-		case m.filterCursor == 12:
+		case m.filterCursor >= categoryStartCursor && m.filterCursor < searchCursor:
+			// Category toggle
+			catIdx := m.filterCursor - categoryStartCursor
+			if catIdx < len(m.categories) {
+				m.toggleFilterCategory(m.categories[catIdx].ID)
+			}
+		case m.filterCursor == clearCursor:
 			// Clear filter
 			m.filter = domain.Filter{}
 		}
@@ -1249,7 +1288,7 @@ func (m *Model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "backspace":
 		// Delete character from search text
-		if m.filterCursor == 11 && len(m.filter.SearchText) > 0 {
+		if m.filterCursor == searchCursor && len(m.filter.SearchText) > 0 {
 			// Handle multi-byte characters properly
 			runes := []rune(m.filter.SearchText)
 			m.filter.SearchText = string(runes[:len(runes)-1])
@@ -1257,7 +1296,7 @@ func (m *Model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	default:
 		// Character input for search text
-		if m.filterCursor == 11 {
+		if m.filterCursor == searchCursor {
 			if len(msg.String()) == 1 {
 				m.filter.SearchText += msg.String()
 			} else if msg.Type == tea.KeySpace {
@@ -1315,6 +1354,27 @@ func (m *Model) toggleFilterPriority(priority domain.Priority) {
 	}
 	// Add priority
 	m.filter.Priorities = append(m.filter.Priorities, priority)
+}
+
+// hasFilterCategory checks if a category ID is in the filter
+func (m *Model) hasFilterCategory(catID int64) bool {
+	for _, id := range m.filter.Categories {
+		if id == catID {
+			return true
+		}
+	}
+	return false
+}
+
+// toggleFilterCategory toggles a category in the filter
+func (m *Model) toggleFilterCategory(catID int64) {
+	for i, id := range m.filter.Categories {
+		if id == catID {
+			m.filter.Categories = append(m.filter.Categories[:i], m.filter.Categories[i+1:]...)
+			return
+		}
+	}
+	m.filter.Categories = append(m.filter.Categories, catID)
 }
 
 // viewSortMenu renders the sort menu overlay
